@@ -1,0 +1,61 @@
+name: Deploy Incident Management Platform
+
+on:
+  push:
+    branches: [master]
+
+env:
+  AWS_REGION: us-east-1
+
+jobs:
+  deploy-backend:
+    name: Deploy Backend
+    runs-on: ubuntu-latest
+    outputs:
+      api_url: ${{ steps.tf-output.outputs.api_url }}
+      websocket_url: ${{ steps.tf-output.outputs.websocket_url }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_wrapper: false
+
+      - name: Terraform init
+        run: terraform init
+        working-directory: terraform
+
+      - name: Terraform apply
+        run: terraform apply -auto-approve
+        working-directory: terraform
+
+      - name: Get outputs
+        id: tf-output
+        run: |
+          echo "api_url=$(terraform output -raw api_url)" >> $GITHUB_OUTPUT
+          echo "websocket_url=$(terraform output -raw websocket_url)" >> $GITHUB_OUTPUT
+        working-directory: terraform
+
+  notify-vercel:
+    name: Show Vercel Deploy Info
+    runs-on: ubuntu-latest
+    needs: deploy-backend
+
+    steps:
+      - name: Print URLs
+        run: |
+          echo "Backend deployed successfully"
+          echo "API URL: ${{ needs.deploy-backend.outputs.api_url }}"
+          echo "WebSocket URL: ${{ needs.deploy-backend.outputs.websocket_url }}"
+          echo "Set these in Vercel environment variables:"
+          echo "NEXT_PUBLIC_API_URL=${{ needs.deploy-backend.outputs.api_url }}"
+          echo "NEXT_PUBLIC_WS_URL=${{ needs.deploy-backend.outputs.websocket_url }}"
