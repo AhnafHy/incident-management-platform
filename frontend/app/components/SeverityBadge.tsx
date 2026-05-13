@@ -1,3 +1,4 @@
+'use client'
 export default function SeverityBadge({ severity, large = false }: { severity: string, large?: boolean }) {
   const styles: Record<string, string> = {
     P1: 'bg-red-500/20 text-red-400 border-red-500/50',

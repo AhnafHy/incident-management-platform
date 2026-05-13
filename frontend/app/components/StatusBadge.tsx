@@ -1,3 +1,4 @@
+'use client'
 export default function StatusBadge({ status }: { status: string }) {
   const styles: Record<string, string> = {
     TRIGGERED: 'bg-red-500/20 text-red-400 border-red-500/30',

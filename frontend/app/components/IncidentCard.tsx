@@ -1,3 +1,4 @@
+'use client'
 import Link from 'next/link'
 import SeverityBadge from './SeverityBadge'
 import StatusBadge from './StatusBadge'
