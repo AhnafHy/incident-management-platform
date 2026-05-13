@@ -10,6 +10,11 @@ import { AlertTriangle, Activity, CheckCircle, Wifi, WifiOff } from 'lucide-reac
 const API = process.env.NEXT_PUBLIC_API_URL
 const WS_URL = process.env.NEXT_PUBLIC_WS_URL
 
+const [showCustomForm, setShowCustomForm] = useState(false)
+const [customTitle, setCustomTitle] = useState('')
+const [customService, setCustomService] = useState('API Gateway')
+const [customSeverity, setCustomSeverity] = useState('P1')
+
 const SERVICES = ['API Gateway', 'Lambda', 'DynamoDB', 'S3', 'EC2', 'RDS', 'CloudFront', 'ECS']
 const TITLES: Record<string, string[]> = {
   P1: ['Database connection pool exhausted', 'API error rate exceeding 50%', 'Complete service outage detected', 'Payment processing failure'],
@@ -99,6 +104,28 @@ export default function Dashboard() {
     }
   }
 
+  const createCustomIncident = async () => {
+  if (!customTitle.trim()) return
+  setSimulating(true)
+  try {
+    await axios.post(`${API}/incidents`, {
+      action: 'create',
+      title: customTitle,
+      description: `Manually created incident for ${customService}.`,
+      severity: customSeverity,
+      service: customService,
+      source: 'manual'
+    })
+    queryClient.invalidateQueries({ queryKey: ['dashboard'] })
+    setCustomTitle('')
+    setShowCustomForm(false)
+  } catch (e) {
+    console.error('Custom incident creation failed:', e)
+  } finally {
+    setTimeout(() => setSimulating(false), 1000)
+  }
+}
+
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
@@ -112,24 +139,76 @@ export default function Dashboard() {
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
-          <span className="text-xs text-gray-500 mr-1">Simulate:</span>
-          {['P1', 'P2', 'P3'].map(sev => (
-            <button
-              key={sev}
-              onClick={() => simulateIncident(sev)}
-              disabled={simulating}
-              className="px-3 py-1.5 rounded-lg text-xs font-bold border transition-all disabled:opacity-50 hover:opacity-80"
-              style={{
-                background: sev === 'P1' ? 'rgba(239,68,68,0.15)' : sev === 'P2' ? 'rgba(249,115,22,0.15)' : 'rgba(234,179,8,0.15)',
-                color: sev === 'P1' ? '#f87171' : sev === 'P2' ? '#fb923c' : '#facc15',
-                borderColor: sev === 'P1' ? 'rgba(239,68,68,0.4)' : sev === 'P2' ? 'rgba(249,115,22,0.4)' : 'rgba(234,179,8,0.4)'
-              }}
-            >
-              {sev}
-            </button>
-          ))}
-        </div>
+<div className="flex items-center gap-2 flex-wrap">
+  <span className="text-xs text-gray-500 mr-1">Simulate:</span>
+  {['P1', 'P2', 'P3'].map(sev => (
+    <button
+      key={sev}
+      onClick={() => simulateIncident(sev)}
+      disabled={simulating}
+      className="px-3 py-1.5 rounded-lg text-xs font-bold border transition-all disabled:opacity-50 hover:opacity-80"
+      style={{
+        background: sev === 'P1' ? 'rgba(239,68,68,0.15)' : sev === 'P2' ? 'rgba(249,115,22,0.15)' : 'rgba(234,179,8,0.15)',
+        color: sev === 'P1' ? '#f87171' : sev === 'P2' ? '#fb923c' : '#facc15',
+        borderColor: sev === 'P1' ? 'rgba(239,68,68,0.4)' : sev === 'P2' ? 'rgba(249,115,22,0.4)' : 'rgba(234,179,8,0.4)'
+      }}
+    >
+      {sev}
+    </button>
+  ))}
+  <button
+    onClick={() => setShowCustomForm(!showCustomForm)}
+    className="px-3 py-1.5 rounded-lg text-xs font-medium border border-gray-600 text-gray-400 hover:border-gray-400 hover:text-white transition-colors"
+  >
+    + Custom
+  </button>
+</div>
+
+{showCustomForm && (
+  <div className="mt-4 bg-gray-800 border border-gray-700 rounded-xl p-4">
+    <p className="text-xs font-medium text-gray-400 mb-3">Create custom incident</p>
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
+      <input
+        type="text"
+        value={customTitle}
+        onChange={e => setCustomTitle(e.target.value)}
+        placeholder="Incident title e.g. Payment API returning 500s"
+        className="bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-gray-500 col-span-2"
+      />
+      <select
+        value={customService}
+        onChange={e => setCustomService(e.target.value)}
+        className="bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-gray-500"
+      >
+        {SERVICES.map(s => <option key={s} value={s}>{s}</option>)}
+      </select>
+      <select
+        value={customSeverity}
+        onChange={e => setCustomSeverity(e.target.value)}
+        className="bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-gray-500"
+      >
+        <option value="P1">P1 — Critical</option>
+        <option value="P2">P2 — High</option>
+        <option value="P3">P3 — Low</option>
+      </select>
+    </div>
+    <div className="flex gap-2">
+      <button
+        onClick={createCustomIncident}
+        disabled={simulating || !customTitle.trim()}
+        className="px-4 py-2 bg-red-500/20 text-red-400 border border-red-500/30 rounded-lg text-xs font-medium hover:bg-red-500/30 transition-colors disabled:opacity-50"
+      >
+        Create incident
+      </button>
+      <button
+        onClick={() => setShowCustomForm(false)}
+        className="px-4 py-2 bg-gray-700 text-gray-400 rounded-lg text-xs font-medium hover:bg-gray-600 transition-colors"
+      >
+        Cancel
+      </button>
+    </div>
+  </div>
+)}
       </div>
 
       {/* Stats */}
