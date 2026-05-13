@@ -3,17 +3,11 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useEffect, useRef, useState } from 'react'
 import axios from 'axios'
-import IncidentCard from './components/IncidentCard'
-import SeverityBadge from './components/SeverityBadge'
 import { AlertTriangle, Activity, CheckCircle, Wifi, WifiOff } from 'lucide-react'
+import IncidentCard from './components/IncidentCard'
 
 const API = process.env.NEXT_PUBLIC_API_URL
 const WS_URL = process.env.NEXT_PUBLIC_WS_URL
-
-const [showCustomForm, setShowCustomForm] = useState(false)
-const [customTitle, setCustomTitle] = useState('')
-const [customService, setCustomService] = useState('API Gateway')
-const [customSeverity, setCustomSeverity] = useState('P1')
 
 const SERVICES = ['API Gateway', 'Lambda', 'DynamoDB', 'S3', 'EC2', 'RDS', 'CloudFront', 'ECS']
 const TITLES: Record<string, string[]> = {
@@ -22,12 +16,22 @@ const TITLES: Record<string, string[]> = {
   P3: ['Elevated CPU usage warning', 'Non-critical service degradation', 'Minor latency increase detected', 'Low disk space warning']
 }
 
+const SEV_STYLES: Record<string, { bg: string; color: string; border: string }> = {
+  P1: { bg: 'rgba(239,68,68,0.15)', color: '#f87171', border: 'rgba(239,68,68,0.4)' },
+  P2: { bg: 'rgba(249,115,22,0.15)', color: '#fb923c', border: 'rgba(249,115,22,0.4)' },
+  P3: { bg: 'rgba(234,179,8,0.15)', color: '#facc15', border: 'rgba(234,179,8,0.4)' }
+}
+
 export default function Dashboard() {
   const queryClient = useQueryClient()
   const wsRef = useRef<WebSocket | null>(null)
   const [wsConnected, setWsConnected] = useState(false)
   const [liveEvents, setLiveEvents] = useState<string[]>([])
   const [simulating, setSimulating] = useState(false)
+  const [showCustomForm, setShowCustomForm] = useState(false)
+  const [customTitle, setCustomTitle] = useState('')
+  const [customService, setCustomService] = useState('API Gateway')
+  const [customSeverity, setCustomSeverity] = useState('P1')
 
   const { data, isLoading } = useQuery({
     queryKey: ['dashboard'],
@@ -35,48 +39,26 @@ export default function Dashboard() {
     refetchInterval: 10000
   })
 
-  // WebSocket connection
   useEffect(() => {
     if (!WS_URL || WS_URL === 'PLACEHOLDER') return
-
     const connect = () => {
       const ws = new WebSocket(WS_URL)
       wsRef.current = ws
-
-      ws.onopen = () => {
-        setWsConnected(true)
-        console.log('WebSocket connected')
-      }
-
+      ws.onopen = () => setWsConnected(true)
       ws.onmessage = (event) => {
         try {
           const message = JSON.parse(event.data)
-          const eventType = message.event_type
-          const data = message.data
-
           setLiveEvents(prev => [
-            `${new Date().toLocaleTimeString()} — ${eventType.replace('_', ' ')}: ${data?.title || data?.incident_id || ''}`,
+            `${new Date().toLocaleTimeString()} — ${message.event_type}: ${message.data?.title || message.data?.incident_id || ''}`,
             ...prev.slice(0, 4)
           ])
-
-          // Invalidate queries to refresh data
           queryClient.invalidateQueries({ queryKey: ['dashboard'] })
           queryClient.invalidateQueries({ queryKey: ['incidents'] })
-        } catch (e) {
-          console.error('WebSocket message parse error:', e)
-        }
+        } catch (e) {}
       }
-
-      ws.onclose = () => {
-        setWsConnected(false)
-        setTimeout(connect, 3000) // Reconnect after 3s
-      }
-
-      ws.onerror = () => {
-        ws.close()
-      }
+      ws.onclose = () => { setWsConnected(false); setTimeout(connect, 3000) }
+      ws.onerror = () => ws.close()
     }
-
     connect()
     return () => wsRef.current?.close()
   }, [queryClient])
@@ -86,45 +68,38 @@ export default function Dashboard() {
     const service = SERVICES[Math.floor(Math.random() * SERVICES.length)]
     const titles = TITLES[severity]
     const title = titles[Math.floor(Math.random() * titles.length)]
-
     try {
       await axios.post(`${API}/incidents`, {
-        action: 'create',
-        title,
-        description: `Automated simulation of a ${severity} incident for demonstration purposes.`,
-        severity,
-        service,
-        source: 'simulation'
+        action: 'create', title,
+        description: `Automated simulation of a ${severity} incident.`,
+        severity, service, source: 'simulation'
       })
       queryClient.invalidateQueries({ queryKey: ['dashboard'] })
     } catch (e) {
-      console.error('Simulation failed:', e)
+      console.error(e)
     } finally {
       setTimeout(() => setSimulating(false), 1000)
     }
   }
 
   const createCustomIncident = async () => {
-  if (!customTitle.trim()) return
-  setSimulating(true)
-  try {
-    await axios.post(`${API}/incidents`, {
-      action: 'create',
-      title: customTitle,
-      description: `Manually created incident for ${customService}.`,
-      severity: customSeverity,
-      service: customService,
-      source: 'manual'
-    })
-    queryClient.invalidateQueries({ queryKey: ['dashboard'] })
-    setCustomTitle('')
-    setShowCustomForm(false)
-  } catch (e) {
-    console.error('Custom incident creation failed:', e)
-  } finally {
-    setTimeout(() => setSimulating(false), 1000)
+    if (!customTitle.trim()) return
+    setSimulating(true)
+    try {
+      await axios.post(`${API}/incidents`, {
+        action: 'create', title: customTitle,
+        description: `Manually created incident for ${customService}.`,
+        severity: customSeverity, service: customService, source: 'manual'
+      })
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] })
+      setCustomTitle('')
+      setShowCustomForm(false)
+    } catch (e) {
+      console.error(e)
+    } finally {
+      setTimeout(() => setSimulating(false), 1000)
+    }
   }
-}
 
   return (
     <div>
@@ -139,79 +114,78 @@ export default function Dashboard() {
           </div>
         </div>
 
-<div className="flex items-center gap-2 flex-wrap">
-  <span className="text-xs text-gray-500 mr-1">Simulate:</span>
-  {['P1', 'P2', 'P3'].map(sev => (
-    <button
-      key={sev}
-      onClick={() => simulateIncident(sev)}
-      disabled={simulating}
-      className="px-3 py-1.5 rounded-lg text-xs font-bold border transition-all disabled:opacity-50 hover:opacity-80"
-      style={{
-        background: sev === 'P1' ? 'rgba(239,68,68,0.15)' : sev === 'P2' ? 'rgba(249,115,22,0.15)' : 'rgba(234,179,8,0.15)',
-        color: sev === 'P1' ? '#f87171' : sev === 'P2' ? '#fb923c' : '#facc15',
-        borderColor: sev === 'P1' ? 'rgba(239,68,68,0.4)' : sev === 'P2' ? 'rgba(249,115,22,0.4)' : 'rgba(234,179,8,0.4)'
-      }}
-    >
-      {sev}
-    </button>
-  ))}
-  <button
-    onClick={() => setShowCustomForm(!showCustomForm)}
-    className="px-3 py-1.5 rounded-lg text-xs font-medium border border-gray-600 text-gray-400 hover:border-gray-400 hover:text-white transition-colors"
-  >
-    + Custom
-  </button>
-</div>
-
-{showCustomForm && (
-  <div className="mt-4 bg-gray-800 border border-gray-700 rounded-xl p-4">
-    <p className="text-xs font-medium text-gray-400 mb-3">Create custom incident</p>
-    <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
-      <input
-        type="text"
-        value={customTitle}
-        onChange={e => setCustomTitle(e.target.value)}
-        placeholder="Incident title e.g. Payment API returning 500s"
-        className="bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-gray-500 col-span-2"
-      />
-      <select
-        value={customService}
-        onChange={e => setCustomService(e.target.value)}
-        className="bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-gray-500"
-      >
-        {SERVICES.map(s => <option key={s} value={s}>{s}</option>)}
-      </select>
-      <select
-        value={customSeverity}
-        onChange={e => setCustomSeverity(e.target.value)}
-        className="bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-gray-500"
-      >
-        <option value="P1">P1 — Critical</option>
-        <option value="P2">P2 — High</option>
-        <option value="P3">P3 — Low</option>
-      </select>
-    </div>
-    <div className="flex gap-2">
-      <button
-        onClick={createCustomIncident}
-        disabled={simulating || !customTitle.trim()}
-        className="px-4 py-2 bg-red-500/20 text-red-400 border border-red-500/30 rounded-lg text-xs font-medium hover:bg-red-500/30 transition-colors disabled:opacity-50"
-      >
-        Create incident
-      </button>
-      <button
-        onClick={() => setShowCustomForm(false)}
-        className="px-4 py-2 bg-gray-700 text-gray-400 rounded-lg text-xs font-medium hover:bg-gray-600 transition-colors"
-      >
-        Cancel
-      </button>
-    </div>
-  </div>
-)}
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="text-xs text-gray-500 mr-1">Simulate:</span>
+          {['P1', 'P2', 'P3'].map(sev => (
+            <button
+              key={sev}
+              onClick={() => simulateIncident(sev)}
+              disabled={simulating}
+              className="px-3 py-1.5 rounded-lg text-xs font-bold border transition-all disabled:opacity-50 hover:opacity-80"
+              style={{
+                background: SEV_STYLES[sev].bg,
+                color: SEV_STYLES[sev].color,
+                borderColor: SEV_STYLES[sev].border
+              }}
+            >
+              {sev}
+            </button>
+          ))}
+          <button
+            onClick={() => setShowCustomForm(!showCustomForm)}
+            className="px-3 py-1.5 rounded-lg text-xs font-medium border border-gray-600 text-gray-400 hover:border-gray-400 hover:text-white transition-colors"
+          >
+            + Custom
+          </button>
+        </div>
       </div>
 
-      {/* Stats */}
+      {showCustomForm && (
+        <div className="mb-6 bg-gray-800 border border-gray-700 rounded-xl p-4">
+          <p className="text-xs font-medium text-gray-400 mb-3">Create custom incident</p>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
+            <input
+              type="text"
+              value={customTitle}
+              onChange={e => setCustomTitle(e.target.value)}
+              placeholder="Incident title e.g. Payment API returning 500s"
+              className="bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-gray-500 md:col-span-2"
+            />
+            <select
+              value={customService}
+              onChange={e => setCustomService(e.target.value)}
+              className="bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-gray-500"
+            >
+              {SERVICES.map(s => <option key={s} value={s}>{s}</option>)}
+            </select>
+            <select
+              value={customSeverity}
+              onChange={e => setCustomSeverity(e.target.value)}
+              className="bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-gray-500"
+            >
+              <option value="P1">P1 — Critical</option>
+              <option value="P2">P2 — High</option>
+              <option value="P3">P3 — Low</option>
+            </select>
+          </div>
+          <div className="flex gap-2">
+            <button
+              onClick={createCustomIncident}
+              disabled={simulating || !customTitle.trim()}
+              className="px-4 py-2 bg-red-500/20 text-red-400 border border-red-500/30 rounded-lg text-xs font-medium hover:bg-red-500/30 transition-colors disabled:opacity-50"
+            >
+              Create incident
+            </button>
+            <button
+              onClick={() => setShowCustomForm(false)}
+              className="px-4 py-2 bg-gray-700 text-gray-400 rounded-lg text-xs font-medium hover:bg-gray-600 transition-colors"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
         <div className="bg-gray-800 border border-gray-700 rounded-xl p-4">
           <div className="flex items-center gap-2 text-gray-400 mb-2">
@@ -244,7 +218,6 @@ export default function Dashboard() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Recent incidents */}
         <div className="lg:col-span-2">
           <h2 className="text-sm font-medium text-gray-400 mb-3">Recent incidents</h2>
           {!data?.recent_incidents?.length ? (
@@ -260,7 +233,6 @@ export default function Dashboard() {
           )}
         </div>
 
-        {/* Live event feed */}
         <div>
           <h2 className="text-sm font-medium text-gray-400 mb-3">Live event feed</h2>
           <div className="bg-gray-800 border border-gray-700 rounded-xl p-4 h-64 overflow-y-auto">
