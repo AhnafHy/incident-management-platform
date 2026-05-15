@@ -8,7 +8,7 @@ A real-time incident management platform built with WebSocket-powered live updat
 **[Open Incident Management Platform →](https://incident-management-platform.vercel.app/)**
 
 Click **P1**, **P2**, or **P3** on the dashboard to simulate an incident and watch it appear in real time via WebSocket. Or click **+ Custom** to create an incident with a specific title, service, and severity.
-
+> **Note:** The on-call schedule and escalation contacts are currently hardcoded in the Lambda functions for demonstration purposes. A production implementation would store engineer profiles in DynamoDB with a management UI for adding, removing, and scheduling engineers, the API and broadcaster layers would require no changes since they already read engineer data dynamically at incident creation time.
 ---
 
 ## What It Does
